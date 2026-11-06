@@ -1,0 +1,43 @@
+name: Build CHINI APK
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Find the project
+        run: |
+          ZIP=$(ls *.zip 2>/dev/null | head -1)
+          if [ -n "$ZIP" ]; then unzip -o -q "$ZIP" -d src; fi
+          SETTINGS=$(find . -name settings.gradle -not -path "./.git/*" | head -1)
+          echo "PROJECT=$(dirname "$SETTINGS")" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.14.3"
+
+      - name: Build the APK
+        run: gradle -p "$PROJECT" assembleDebug --no-daemon
+
+      - name: Publish the APK for download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp "$PROJECT"/app/build/outputs/apk/debug/*.apk CHINI.apk
+          gh release delete chini-apk -y --cleanup-tag || true
+          gh release create chini-apk CHINI.apk --title "CHINI app" --notes "Download CHINI.apk and open it on your Android phone."
